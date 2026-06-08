@@ -144,7 +144,13 @@
               `${fmt(start)} … ${fmt(end)}`);
 
   // ---- 5. Ensure workday + book desk, per day ----
+  console.log(`[mapiq] Running — please DON'T reload or leave this tab until you see "Done".`);
   const results = [];
+  const record = r => {
+    results.push(r);
+    console.log(`[mapiq] ${results.length}/${days.length}  ${r.date}  ${r.status}${r.detail ? "  — " + r.detail : ""}`);
+    return r;
+  };
   for (const d of days) {
     const ds = fmt(d);
     const localStart = ds + "T00:00:00", localEnd = ds + "T23:59:00";
@@ -153,26 +159,25 @@
     const existing = reservedByDate[ds];
     if (existing) {
       const same = existing.deskId === DESK_NODE_ID;
-      results.push({ date: ds, status: same ? "already booked (this desk)" : `already booked (${existing.deskName})`, detail: "skipped" });
+      record({ date: ds, status: same ? "already booked (this desk)" : `already booked (${existing.deskName})`, detail: "skipped" });
       continue;
     }
 
     // ensure an office day (workday) exists
     let workdayId = workdayByDate[ds];
     if (!workdayId) {
-      if (!CREATE_MISSING_WORKDAYS) { results.push({ date: ds, status: "no office day", detail: "set CREATE_MISSING_WORKDAYS=true" }); continue; }
-      if (DRY_RUN) { results.push({ date: ds, status: "would create office day + book", detail: "" }); continue; }
-      if (!buildingId) { results.push({ date: ds, status: "skip", detail: "no buildingId resolved" }); continue; }
+      if (!CREATE_MISSING_WORKDAYS) { record({ date: ds, status: "no office day", detail: "set CREATE_MISSING_WORKDAYS=true" }); continue; }
+      if (DRY_RUN) { record({ date: ds, status: "would create office day + book", detail: "" }); continue; }
+      if (!buildingId) { record({ date: ds, status: "skip", detail: "no buildingId resolved" }); continue; }
       try {
-        // Inferred from the GET /me/workdays shape — verify if it ever 4xx's.
         const r = await api("POST", "/me/workdays", { localStart, localEnd, buildingId, status: "OfficeDay" });
         const data = tryParse(await r.text());
-        if (!r.ok) { results.push({ date: ds, status: `workday FAIL ${r.status}`, detail: typeof data === "string" ? data : JSON.stringify(data) }); continue; }
+        if (!r.ok) { record({ date: ds, status: `workday FAIL ${r.status}`, detail: typeof data === "string" ? data : JSON.stringify(data) }); continue; }
         workdayId = data?.id;
         await sleep(DELAY_MS);
-      } catch (e) { results.push({ date: ds, status: "workday ERROR", detail: String(e) }); continue; }
+      } catch (e) { record({ date: ds, status: "workday ERROR", detail: String(e) }); continue; }
     } else if (DRY_RUN) {
-      results.push({ date: ds, status: "would book (office day exists)", detail: "" }); continue;
+      record({ date: ds, status: "would book (office day exists)", detail: "" }); continue;
     }
 
     // book the desk
@@ -181,12 +186,12 @@
       if (workdayId) body.workdayId = workdayId;
       const r = await api("POST", "/me/workspace-reservations", body);
       const data = tryParse(await r.text());
-      results.push({
+      record({
         date: ds,
         status: r.ok ? "BOOKED ✅" : `FAIL ${r.status}`,
         detail: r.ok ? (data?.workspace?.deskName ?? "") : (typeof data === "string" ? data : JSON.stringify(data)),
       });
-    } catch (e) { results.push({ date: ds, status: "ERROR", detail: String(e) }); }
+    } catch (e) { record({ date: ds, status: "ERROR", detail: String(e) }); }
     await sleep(DELAY_MS);
   }
 
