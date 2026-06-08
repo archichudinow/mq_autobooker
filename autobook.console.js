@@ -78,9 +78,12 @@
     "x-api-version": "2.0",
   };
   const api = (method, path, body) => fetch(API + path, {
-    method, headers, credentials: "include",
+    method, headers, credentials: "include", cache: "no-store",
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  // A cancelled/expired reservation can still be returned by the API — don't
+  // treat it as an active booking, or deleted days never get re-booked.
+  const isActive = v => !/cancel|declin|delet|expir|reject/i.test(v.status || "");
 
   // ---- 2. Who am I / limits / default building ----
   let buildingId = null, daysAhead = DAYS_AHEAD ?? 14, regDays = [1, 2, 3, 4, 5];
@@ -118,6 +121,7 @@
   try {
     const r = await api("GET", `/me/workspace-reservations?${q}`);
     if (r.ok) for (const v of await r.json()) {
+      if (!isActive(v)) continue;
       if (!buildingId && v.workspace?.buildingId) buildingId = v.workspace.buildingId;
       reservedByDate[String(v.localStart).slice(0, 10)] =
         { deskId: v.workspace?.nodeId, deskName: v.workspace?.deskName };

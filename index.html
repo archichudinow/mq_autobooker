@@ -88,7 +88,8 @@ $("go").onclick = async () => {
     "accept": "application/json, text/plain, */*",
     "x-api-version": "2.0",
   };
-  const api = (m, p, b) => fetch(API + p, { method: m, headers, body: b === undefined ? undefined : JSON.stringify(b) });
+  const api = (m, p, b) => fetch(API + p, { method: m, headers, cache: "no-store", body: b === undefined ? undefined : JSON.stringify(b) });
+  const isActive = v => !/cancel|declin|delet|expir|reject/i.test(v.status || "");
   const weekends = $("weekends").checked, create = $("create").checked, dry = $("dry").checked;
 
   const out = $("out");
@@ -116,7 +117,7 @@ $("go").onclick = async () => {
 
   const workdayByDate = {}, reservedByDate = {}, closed = new Set();
   try { const r = await api("GET", `/me/workdays?${q}`); if (r.ok) for (const w of await r.json()) { if (!buildingId && w.buildingId) buildingId = w.buildingId; workdayByDate[String(w.localStart).slice(0,10)] = w.id; } } catch {}
-  try { const r = await api("GET", `/me/workspace-reservations?${q}`); if (r.ok) for (const v of await r.json()) reservedByDate[String(v.localStart).slice(0,10)] = { deskId: v.workspace?.nodeId, deskName: v.workspace?.deskName }; } catch {}
+  try { const r = await api("GET", `/me/workspace-reservations?${q}`); if (r.ok) for (const v of await r.json()) { if (!isActive(v)) continue; reservedByDate[String(v.localStart).slice(0,10)] = { deskId: v.workspace?.nodeId, deskName: v.workspace?.deskName }; } } catch {}
   try { const r = await api("GET", `/shifts/me/openingdayexceptions?from=${fmt(start)}&to=${fmt(end)}`); if (r.ok) for (const x of await r.json()) { const ds = String(x.date||x.localStart||x.day||"").slice(0,10); if (ds) closed.add(ds); } } catch {}
 
   const days = [];

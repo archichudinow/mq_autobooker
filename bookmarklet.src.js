@@ -53,7 +53,8 @@
   try { email = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).email || "you"; } catch {}
 
   const headers = { authorization: "Bearer " + token, "content-type": "application/json", accept: "application/json, text/plain, */*", "x-api-version": "2.0" };
-  const api = (m, p, b) => fetch(API + p, { method: m, headers, credentials: "include", body: b === undefined ? undefined : JSON.stringify(b) });
+  const api = (m, p, b) => fetch(API + p, { method: m, headers, credentials: "include", cache: "no-store", body: b === undefined ? undefined : JSON.stringify(b) });
+  const isActive = v => !/cancel|declin|delet|expir|reject/i.test(v.status || "");
   const pad = n => String(n).padStart(2, "0");
   const fmt = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -71,14 +72,14 @@
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const end = new Date(today); end.setDate(today.getDate() + daysAhead);
-  const look = new Date(today); look.setDate(today.getDate() - 30); // look back to detect your desk
-  const q = `startDate=${fmt(look)}T00:00&endDate=${fmt(end)}T00:00`;
+  // Query only the forward window — the workdays endpoint 400s on wide/past ranges.
+  const q = `startDate=${fmt(today)}T00:00&endDate=${fmt(end)}T00:00`;
 
   // ---- existing workdays + reservations ----
   const workdayByDate = {}, reservedByDate = {}, closed = new Set();
   let allRes = [];
   try { const r = await api("GET", `/me/workdays?${q}`); if (r.ok) for (const w of await r.json()) { if (!buildingId && w.buildingId) buildingId = w.buildingId; workdayByDate[String(w.localStart).slice(0, 10)] = w.id; } } catch {}
-  try { const r = await api("GET", `/me/workspace-reservations?${q}`); if (r.ok) { allRes = await r.json(); for (const v of allRes) { const ds = String(v.localStart).slice(0, 10); if (ds >= fmt(today)) reservedByDate[ds] = { deskId: v.workspace?.nodeId, deskName: v.workspace?.deskName }; } } } catch {}
+  try { const r = await api("GET", `/me/workspace-reservations?${q}`); if (r.ok) { allRes = (await r.json()).filter(isActive); for (const v of allRes) { const ds = String(v.localStart).slice(0, 10); if (ds >= fmt(today)) reservedByDate[ds] = { deskId: v.workspace?.nodeId, deskName: v.workspace?.deskName }; } } } catch {}
   try { const r = await api("GET", `/shifts/me/openingdayexceptions?from=${fmt(today)}&to=${fmt(end)}`); if (r.ok) for (const x of await r.json()) { const ds = String(x.date || x.localStart || x.day || "").slice(0, 10); if (ds) closed.add(ds); } } catch {}
 
   // ---- figure out which desk to book ----
