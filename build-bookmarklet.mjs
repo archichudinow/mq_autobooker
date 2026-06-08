@@ -88,6 +88,29 @@ and paste the button's link as the URL.</p>
      open up (you can typically book ~2 weeks ahead).</li>
 </ul>
 
+<h2>What it does on your behalf</h2>
+<p>Nothing hidden — using the Mapiq login already open in your tab, one click does exactly
+what you'd do by hand:</p>
+<ul>
+ <li><b>Reads</b> your booking settings (how far ahead you can book, your office days, your
+     building) and your existing bookings — so it knows which days to skip and which desk you use.</li>
+ <li><b>Books</b>, for each available day: marks the day as an office day if needed, then reserves
+     your desk. It asks you to <b>confirm first</b>.</li>
+</ul>
+<p>What it <b>never</b> does:</p>
+<ul>
+ <li>It never sees your <b>password</b> or login details.</li>
+ <li>It never <b>cancels or deletes</b> any booking — it can only add. Undo anything yourself in Mapiq.</li>
+ <li>It never touches <b>anyone else's</b> account, and never sends data anywhere except Mapiq.</li>
+</ul>
+
+<div class="box warn">
+ <h3>Responsible use</h3>
+ <p class="small">Only book days you actually plan to come in, and cancel days you won't use so a
+ colleague can take the desk. If your office has limited or shared desks, make sure booking ahead
+ like this is okay where you work.</p>
+</div>
+
 <h2>Privacy &amp; security</h2>
 <p>It runs entirely in your browser. It reads the Mapiq session token already present in your
 logged-in tab and uses it <b>only</b> to call Mapiq's own API at <code>app.mapiq.com</code>.</p>
