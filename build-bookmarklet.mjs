@@ -93,9 +93,11 @@ and paste the button's link as the URL.</p>
 what you'd do by hand:</p>
 <ul>
  <li><b>Reads</b> your booking settings (how far ahead you can book, your office days, your
-     building) and your existing bookings — so it knows which days to skip and which desk you use.</li>
- <li><b>Books</b>, for each available day: marks the day as an office day if needed, then reserves
-     your desk. It asks you to <b>confirm first</b>.</li>
+     building), your existing bookings, and whether your desk is free each day — so it knows which
+     days to skip and which desk you use.</li>
+ <li><b>Books</b>, for each free day: marks the day as an office day if needed, then reserves
+     your desk. Days where your desk is already taken are skipped (no office day created). It asks
+     you to <b>confirm first</b>.</li>
 </ul>
 <p>What it <b>never</b> does:</p>
 <ul>

@@ -104,13 +104,14 @@
   // Uses recent reservations (incl. just-cancelled), so it tracks the desk you
   // last chose and survives deleting all upcoming bookings.
   // Privacy: we deliberately store NOTHING (no token, no desk) on the device.
-  let deskId = "", deskName = "", deskLoc = "";
+  let deskId = "", deskName = "", deskLoc = "", areaId = "";
   const deskRes = rawRes.filter(v => v.workspace?.nodeType === "Desk" && v.workspace?.nodeId);
   if (deskRes.length) {
     deskRes.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))); // newest first
     const w = deskRes[0].workspace;
     deskId = w.nodeId; deskName = w.deskName || w.nodeName || "your desk";
     deskLoc = [w.areaName, w.floorName, w.buildingName].filter(Boolean).join(" · ");
+    areaId = w.areaId || "";
   }
   if (!deskId) {
     deskId = (prompt("Couldn't detect your desk. Book one day manually in Mapiq first, then click again — or paste your desk id here:") || "").trim();
@@ -131,11 +132,26 @@
   // A desk taken by someone else isn't an error — show it gently, not red.
   const isTaken = (status, text) => status === 409 ||
     /taken|occup|unavail|not available|already (booked|reserved|taken)|fully booked|no (capacity|availability|space)|capacity|full|in use|reserved by/i.test(text || "");
+  // Pre-check: is OUR desk already full that day? Returns true=taken, false=free,
+  // null=couldn't tell (then we just try, as before). Skips taken days before
+  // creating an office day, so we never leave you "in office" with no desk.
+  const deskTaken = async (ds) => {
+    if (!areaId) return null;
+    try {
+      const r = await api("GET", `/workspace-reservations/count?groupUpTo=Desk&nodeId=${areaId}&startDate=${ds}T00:00:00&endDate=${ds}T23:59:00`);
+      if (!r.ok) return null;
+      const list = await r.json();
+      if (!Array.isArray(list)) return null;
+      const mine = list.find(x => (x.deskId || x.nodeId) === deskId);
+      return mine ? (mine.booked || 0) >= 1 : false; // not listed => free
+    } catch { return null; }
+  };
   let booked = 0, skipped = 0, taken = 0, failed = 0;
   for (const d of days) {
     const ds = fmt(d), localStart = ds + "T00:00:00", localEnd = ds + "T23:59:00";
     const ex = reservedByDate[ds];
     if (ex) { skipped++; say(`${ds} — already booked (${ex.deskName || "desk"})`, "muted"); continue; }
+    if (await deskTaken(ds) === true) { taken++; say(`${ds} — taken by someone else`, "muted"); await sleep(150); continue; }
     let workdayId = workdayByDate[ds];
     try {
       if (!workdayId) {
