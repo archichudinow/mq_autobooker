@@ -8,7 +8,7 @@
  *   - shows a live overlay on the page (no DevTools needed)
  *
  * This readable file is the SOURCE. The actual bookmarklet is generated from
- * it by build-bookmarklet.mjs and embedded into bookmarklet.html.
+ * it by build-bookmarklet.mjs and embedded into index.html (the install page).
  * ========================================================================= */
 
 (async () => {
@@ -20,19 +20,33 @@
     alert("Open app.mapiq.com (and log in) first, then click this bookmark.");
     return;
   }
+  const dark = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches;
+  const C = dark
+    ? { bg: "#1a1916", fg: "#ecebe4", mut: "#9c9a90", line: "#2b2a26", head: "#100f0d" }
+    : { bg: "#ffffff", fg: "#16150f", mut: "#8a8880", line: "#e4e2da", head: "#f7f6f2" };
+  const SERIF = "'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif";
+  const SANS = "ui-sans-serif,system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif";
   document.getElementById("mqab")?.remove();
   const box = document.createElement("div");
   box.id = "mqab";
-  box.style.cssText = "position:fixed;top:16px;right:16px;z-index:2147483647;width:320px;max-height:80vh;overflow:auto;background:#14161a;color:#eef;font:13px/1.5 system-ui,Segoe UI,sans-serif;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.45);padding:0";
+  box.style.cssText = `position:fixed;top:18px;right:18px;z-index:2147483647;width:300px;max-height:80vh;display:flex;flex-direction:column;background:${C.bg};color:${C.fg};font-family:${SANS};font-size:13px;line-height:1.55;border:1px solid ${C.line};border-radius:8px;box-shadow:0 14px 44px rgba(0,0,0,.20);overflow:hidden`;
   box.innerHTML =
-    "<div style='display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#1d2026;border-radius:12px 12px 0 0'>" +
-    "<b>Mapiq auto-booker</b><span id='mqab-x' style='cursor:pointer;opacity:.6;font-size:18px'>×</span></div>" +
-    "<div id='mqab-body' style='padding:12px 14px'></div>";
+    `<div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;background:${C.head};border-bottom:1px solid ${C.line}">` +
+    `<span style="font-family:${SERIF};font-weight:500;font-size:15px">Mapiq auto-booker</span>` +
+    `<span id="mqab-x" style="cursor:pointer;color:${C.mut};font-size:18px;line-height:1">&times;</span></div>` +
+    `<div id="mqab-body" style="padding:11px 15px;overflow:auto"></div>`;
   document.body.appendChild(box);
   box.querySelector("#mqab-x").onclick = () => box.remove();
   const body = box.querySelector("#mqab-body");
-  const say = (html, color) => { const p = document.createElement("div"); p.style.cssText = "margin:3px 0" + (color ? ";color:" + color : ""); p.innerHTML = html; body.appendChild(p); box.scrollTop = box.scrollHeight; return p; };
-  const fail = msg => { say("⚠️ " + msg, "#ff8a8a"); };
+  const STYLE = {
+    info: `color:${C.fg}`,
+    muted: `color:${C.mut}`,
+    ok: `color:${C.fg};font-weight:600`,
+    bad: `color:${C.fg};font-weight:600;text-decoration:underline`,
+    done: `color:${C.fg};font-weight:600;border-top:1px solid ${C.line};margin-top:9px;padding-top:9px`,
+  };
+  const say = (html, kind) => { const p = document.createElement("div"); p.style.cssText = "margin:3px 0;" + (STYLE[kind] || STYLE.info); p.innerHTML = html; body.appendChild(p); body.scrollTop = body.scrollHeight; return p; };
+  const fail = msg => say("&times; " + msg, "bad");
 
   // ---- token (scan local + session storage for the MSAL access token) ----
   function findToken() {
@@ -61,7 +75,7 @@
   const tryParse = t => { try { return JSON.parse(t); } catch { return t; } };
   const DOW = { Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
 
-  say("Signed in as <b>" + email + "</b>", "#9fd");
+  say("Signed in as <b>" + email + "</b>", "muted");
 
   // ---- account limits + building ----
   let buildingId = null, daysAhead = 14, regDays = [1, 2, 3, 4, 5];
@@ -106,7 +120,7 @@
   const days = [];
   for (let i = 0; i <= daysAhead; i++) { const d = new Date(today); d.setDate(today.getDate() + i); if (!regDays.includes(d.getDay())) continue; if (closed.has(fmt(d))) continue; days.push(d); }
 
-  if (!confirm(`Book ${deskName || "your desk"} for all available days (${fmt(today)} … ${fmt(end)})?\n\nAlready-booked days are skipped.`)) { say("Cancelled.", "#ffb"); return; }
+  if (!confirm(`Book ${deskName || "your desk"} for all available days (${fmt(today)} … ${fmt(end)})?\n\nAlready-booked days are skipped.`)) { say("Cancelled.", "muted"); return; }
   say(`Booking <b>${deskName || deskId}</b> for ${days.length} day(s)…`);
 
   // ---- ensure office day + book desk, per day ----
@@ -114,7 +128,7 @@
   for (const d of days) {
     const ds = fmt(d), localStart = ds + "T00:00:00", localEnd = ds + "T23:59:00";
     const ex = reservedByDate[ds];
-    if (ex) { skipped++; say(`${ds} — already booked (${ex.deskName || "desk"})`, "#aaa"); continue; }
+    if (ex) { skipped++; say(`${ds} — already booked (${ex.deskName || "desk"})`, "muted"); continue; }
     let workdayId = workdayByDate[ds];
     try {
       if (!workdayId) {
@@ -125,10 +139,10 @@
         workdayId = data?.id; await sleep(300);
       }
       const r = await api("POST", "/me/workspace-reservations", { localStart, localEnd, nodeId: deskId, invitations: [], ...(workdayId ? { workdayId } : {}) });
-      if (r.ok) { booked++; say(`${ds} — booked ✅`, "#9f9"); }
+      if (r.ok) { booked++; say(`${ds} — booked ✓`, "ok"); }
       else { failed++; const t = await r.text(); fail(`${ds} — failed (${r.status}) ${String(t).slice(0, 80)}`); }
     } catch (e) { failed++; fail(`${ds} — error`); }
     await sleep(300);
   }
-  say(`<b>Done — booked ${booked}, skipped ${skipped}, failed ${failed}.</b>`, "#9fd");
+  say(`Done — booked ${booked}, skipped ${skipped}, failed ${failed}.`, "done");
 })(); void 0;

@@ -1,10 +1,28 @@
 # mq_autobooker
 
-Book your Mapiq desk for **every available day in one shot**, instead of
+Book your Mapiq desk for **every available day in one click**, instead of
 clicking through the calendar day by day.
 
-Reverse-engineered from HAR captures of app.mapiq.com. The tool replays the
-app's real flow:
+> **Educational / hobby demo — use at your own risk.** Not affiliated with,
+> endorsed by, or supported by Mapiq. Use it in line with your organisation's
+> policies and Mapiq's terms. It runs entirely in your browser, talks only to
+> `app.mapiq.com`, and stores nothing.
+
+## Quick start (bookmarklet)
+
+`index.html` is a self-contained **install page**. Open it (or host it on
+GitHub Pages and share the link), then:
+
+1. Drag the **“Mapiq: book all days”** button to your bookmarks bar.
+2. Open <https://app.mapiq.com> and log in.
+3. Click the bookmark. A small panel books each available day and reports
+   **Done**.
+
+No DevTools, no desk id to look up — it books the **same desk as your most
+recent booking** and skips days you've already booked, so it's safe to re-run
+weekly as the window rolls forward.
+
+## How it works (verified against the live API)
 
 ```
 1. POST /api/v2/shifts/me/login               -> your limits + default building
@@ -18,101 +36,44 @@ app's real flow:
      "nodeId":"<desk id>", "invitations":[], "workdayId":"yLbAMW2qkbn2" }
 ```
 
-### How the dates / workdayId work (the part that confused us at first)
-
 - A **"workday" = a day you've marked as an office day.** `GET /me/workdays`
-  returns them, and each one's `id` is exactly the `workdayId` the desk booking
-  needs. So the workday list *is* your set of bookable days, with the precise
-  `localStart`/`localEnd` and id.
-- A desk reservation must be tied to a workday for that date, so booking a
-  brand-new day is two steps: create the office day, then book the desk. The
-  tool does both.
-- Your booking window comes from `POST /shifts/me/login`
-  (`effectiveAccessProfile`): typically `daysAhead: 14`, `registrationDays:
-  Mon–Fri`. The tool reads these and only targets days you're actually allowed
-  to book, skipping weekends and building-closed days.
+  returns them, and each one's `id` is exactly the `workdayId` a desk booking
+  needs. A reservation must be tied to a workday, so booking a brand-new day is
+  two steps: create the office day, then book the desk — the tool does both.
+- Your booking window comes from `shifts/me/login` (`effectiveAccessProfile`):
+  typically `daysAhead: 14`, `registrationDays: Mon–Fri`. The tool respects it
+  and skips weekends and building-closed days.
+- **Desk selection** follows your *most recent* desk reservation (looked up over
+  the last ~30 days, including just-cancelled ones, so it survives deleting all
+  upcoming bookings). Book a different desk once and the next run follows it.
+- **Cancelled reservations** are ignored (Mapiq keeps them ~30 days with a
+  cancelled status), so a day you deleted re-books cleanly.
 
-## Sharing with colleagues (easiest, no DevTools)
+## Privacy & security
 
-For non-technical colleagues, use the **bookmarklet** — a one-click bookmark, no
-console, no GUID hunting:
+- **Stores nothing** — no token, no desk id written to disk.
+- Reads the Mapiq session token already in your logged-in tab and uses it only
+  to call Mapiq's own API. **No third-party requests, no tracking.**
+- The install page loads no external fonts/scripts — fully self-contained.
 
-- `bookmarklet.src.js` — readable source.
-- `build-bookmarklet.mjs` — run `node build-bookmarklet.mjs` to (re)generate…
-- `bookmarklet.html` — a shareable **install page**: drag one button to the
-  bookmarks bar, then click it on app.mapiq.com any time.
+## Power-user alternative: console script
 
-It auto-reads their token, **auto-detects their desk from their most recent
-booking** (so they never need a desk id), shows a live progress panel on the
-page, and skips already-booked days. Host `bookmarklet.html` anywhere (e.g.
-GitHub Pages) and share the link, or just send the file.
+`autobook.console.js` does the same thing from the DevTools console (auto-reads
+the token, configurable `DESK_NODE_ID` / `DAYS_AHEAD` / `DRY_RUN`, prints a
+live table). Handy for debugging or one-off runs without touching a bookmark.
+Paste it into the console on app.mapiq.com; set `DRY_RUN = true` first to
+preview.
 
-## Which version to use
+## Developing
 
-| | `autobook.console.js` (recommended) | `index.html` (static page) |
-|---|---|---|
-| Where it runs | DevTools console on app.mapiq.com | any browser / open the file directly |
-| Token | **auto-read** from your login (MSAL localStorage) | you **paste it** (snippet provided) |
-| CORS / CSP | none — same origin, console is CSP-exempt | relies on the API's `access-control-allow-origin: *`; may hit a preflight from `file://` |
-| Best for | just works, re-run with one click | a friendlier UI, or sharing with non-devs |
-
-Both do the same thing and share the same logic. **Start with the console
-script** — it sidesteps every blocker.
-
-## Usage — console script (recommended)
-
-1. Log in to <https://app.mapiq.com>.
-2. Open DevTools (**F12**) → **Console**.
-3. Edit the top of `autobook.console.js`:
-   - `DESK_NODE_ID` — your desk id (the `nodeId` in the booking call, e.g.
-     `27a000d2-…`).
-   - `DAYS_AHEAD` (`null` = use your account limit), `INCLUDE_WEEKENDS`,
-     `CREATE_MISSING_WORKDAYS`, `DRY_RUN` as you like.
-4. Paste the whole file into the console, press **Enter**.
-5. Read the printed table. Set `DRY_RUN = true` first if you want to preview.
-
-Save it as a DevTools **Snippet** (Sources → Snippets → New) to re-run with a
-single click next time.
-
-## Usage — static page
-
-1. Open `index.html` (double-click it, or host it anywhere).
-2. Follow the expandable "How to get your token" box — it gives you a one-line
-   console snippet that copies your token to the clipboard.
-3. Paste token + desk id, set the range, click **Book all available days**.
-
-Inputs are remembered in the page's own localStorage.
-
-## Finding your desk id
-
-In the booking request the desk is `nodeId`. To grab yours: book one day
-manually with DevTools → Network open, click the
-`me/workspace-reservations` POST, and copy `nodeId` from the payload (or
-`workspace.deskId` from the response). It's a GUID like
-`27a000d2-a0fd-4da8-8c6c-69ad2e5453b4`.
-
-## Blockers & how they're handled
-
-- **Auth is a Bearer token, not just your cookie.** It's an Azure AD B2C /
-  MSAL access token (~1 hour lifetime) kept in `localStorage`. The console
-  script reads it automatically; the static page asks you to paste it.
-- **CSP `script-src 'self'`** on the app blocks bookmarklets — but **not** the
-  DevTools console, which is why the console version is the reliable path.
-- **`workdayId` (solved).** It's `workday.id` from `GET /me/workdays` — the
-  tools fetch it, no guessing.
-- **Creating office days (verified).** Days you haven't planned yet are
-  registered with `POST /me/workdays`
-  (`{ localStart, localEnd, buildingId, status:"OfficeDay" }`), then booked.
-  Confirmed working end-to-end against a live account (200 + reservation
-  succeeds with the returned id). Set `CREATE_MISSING_WORKDAYS = false` if you
-  only want to book days you've already marked as office days.
+- `bookmarklet.src.js` — readable source for the bookmarklet.
+- `build-bookmarklet.mjs` — run `node build-bookmarklet.mjs` to regenerate
+  `index.html` (it minifies the source and embeds it as the bookmark URL).
+- Edit the source, rebuild, commit `index.html`.
 
 ## Notes
 
-- Bookings are sent sequentially with a small delay to be gentle on the API.
-- Already-booked days are skipped; unavailable days show a failure row; the
-  rest still go through.
-- Respects your account's booking window (`daysAhead`, `registrationDays`) and
-  skips building-closed days.
-- Only books your own desk for yourself (`invitations: []`).
-- **Run with `DRY_RUN` first** to preview exactly what it will create/book.
+- Bookings go out sequentially with a small delay to be gentle on the API.
+- Already-booked days are skipped; unavailable days show a failure row.
+- `GET /me/workdays` 400s on wide/past date ranges, so it's only ever queried
+  for the forward window.
