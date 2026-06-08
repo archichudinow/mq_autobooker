@@ -32,6 +32,21 @@ app's real flow:
   Mon–Fri`. The tool reads these and only targets days you're actually allowed
   to book, skipping weekends and building-closed days.
 
+## Sharing with colleagues (easiest, no DevTools)
+
+For non-technical colleagues, use the **bookmarklet** — a one-click bookmark, no
+console, no GUID hunting:
+
+- `bookmarklet.src.js` — readable source.
+- `build-bookmarklet.mjs` — run `node build-bookmarklet.mjs` to (re)generate…
+- `bookmarklet.html` — a shareable **install page**: drag one button to the
+  bookmarks bar, then click it on app.mapiq.com any time.
+
+It auto-reads their token, **auto-detects their desk from their most recent
+booking** (so they never need a desk id), shows a live progress panel on the
+page, and skips already-booked days. Host `bookmarklet.html` anywhere (e.g.
+GitHub Pages) and share the link, or just send the file.
+
 ## Which version to use
 
 | | `autobook.console.js` (recommended) | `index.html` (static page) |
