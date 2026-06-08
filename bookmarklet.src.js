@@ -72,30 +72,35 @@
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const end = new Date(today); end.setDate(today.getDate() + daysAhead);
-  // Query only the forward window — the workdays endpoint 400s on wide/past ranges.
+  const look = new Date(today); look.setDate(today.getDate() - 30);
+  // Workdays endpoint 400s on wide/past ranges -> forward only. Reservations
+  // tolerates a lookback, which we use to detect your most-recent desk.
   const q = `startDate=${fmt(today)}T00:00&endDate=${fmt(end)}T00:00`;
+  const qRes = `startDate=${fmt(look)}T00:00&endDate=${fmt(end)}T00:00`;
 
   // ---- existing workdays + reservations ----
   const workdayByDate = {}, reservedByDate = {}, closed = new Set();
-  let allRes = [];
+  let rawRes = [];
   try { const r = await api("GET", `/me/workdays?${q}`); if (r.ok) for (const w of await r.json()) { if (!buildingId && w.buildingId) buildingId = w.buildingId; workdayByDate[String(w.localStart).slice(0, 10)] = w.id; } } catch {}
-  try { const r = await api("GET", `/me/workspace-reservations?${q}`); if (r.ok) { allRes = (await r.json()).filter(isActive); for (const v of allRes) { const ds = String(v.localStart).slice(0, 10); if (ds >= fmt(today)) reservedByDate[ds] = { deskId: v.workspace?.nodeId, deskName: v.workspace?.deskName }; } } } catch {}
+  try { const r = await api("GET", `/me/workspace-reservations?${qRes}`); if (r.ok) rawRes = await r.json(); } catch {}
+  for (const v of rawRes) { const ds = String(v.localStart).slice(0, 10); if (isActive(v) && ds >= fmt(today)) reservedByDate[ds] = { deskId: v.workspace?.nodeId, deskName: v.workspace?.deskName }; }
   try { const r = await api("GET", `/shifts/me/openingdayexceptions?from=${fmt(today)}&to=${fmt(end)}`); if (r.ok) for (const x of await r.json()) { const ds = String(x.date || x.localStart || x.day || "").slice(0, 10); if (ds) closed.add(ds); } } catch {}
 
-  // ---- figure out which desk to book ----
-  let deskId = localStorage.getItem("mqab_desk") || "";
-  let deskName = localStorage.getItem("mqab_deskName") || "";
-  if (!deskId) {
-    const desks = allRes.filter(v => v.workspace?.nodeType === "Desk" && v.workspace?.nodeId);
-    if (desks.length) { desks.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))); deskId = desks[0].workspace.nodeId; deskName = desks[0].workspace.deskName; }
+  // ---- which desk to book: follow your MOST RECENT desk booking ----
+  // Uses recent reservations (incl. just-cancelled), so it tracks the desk you
+  // last chose and survives deleting all upcoming bookings.
+  // Privacy: we deliberately store NOTHING (no token, no desk) on the device.
+  let deskId = "", deskName = "";
+  const deskRes = rawRes.filter(v => v.workspace?.nodeType === "Desk" && v.workspace?.nodeId);
+  if (deskRes.length) {
+    deskRes.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))); // newest first
+    deskId = deskRes[0].workspace.nodeId; deskName = deskRes[0].workspace.deskName;
   }
   if (!deskId) {
     deskId = (prompt("Couldn't detect your desk. Book one day manually in Mapiq first, then click again — or paste your desk id here:") || "").trim();
     if (!deskId) { fail("No desk selected — nothing to do."); return; }
     deskName = "your desk";
   }
-  localStorage.setItem("mqab_desk", deskId);
-  if (deskName) localStorage.setItem("mqab_deskName", deskName);
 
   // ---- target days ----
   const days = [];
