@@ -123,12 +123,9 @@
   const days = [];
   for (let i = 0; i <= daysAhead; i++) { const d = new Date(today); d.setDate(today.getDate() + i); if (!regDays.includes(d.getDay())) continue; if (closed.has(fmt(d))) continue; days.push(d); }
 
-  if (!confirm(`Book ${deskName} for all available days (${fmt(today)} … ${fmt(end)})?\n\nAlready-booked days are skipped.`)) { say("Cancelled.", "muted"); return; }
   say(`Desk: <b>${deskName}</b>`, "info");
   if (deskLoc) say(deskLoc, "muted");
-  say(`Booking for ${days.length} day(s)…`, "muted");
 
-  // ---- ensure office day + book desk, per day ----
   // A desk taken by someone else isn't an error — show it gently, not red.
   const isTaken = (status, text) => status === 409 ||
     /taken|occup|unavail|not available|already (booked|reserved|taken)|fully booked|no (capacity|availability|space)|capacity|full|in use|reserved by/i.test(text || "");
@@ -146,32 +143,51 @@
       return mine ? (mine.booked || 0) >= 1 : false; // not listed => free
     } catch { return null; }
   };
-  let booked = 0, skipped = 0, taken = 0, failed = 0;
-  for (const d of days) {
-    const ds = fmt(d), localStart = ds + "T00:00:00", localEnd = ds + "T23:59:00";
-    const ex = reservedByDate[ds];
-    if (ex) { skipped++; say(`${ds} — already booked (${ex.deskName || "desk"})`, "muted"); continue; }
-    if (await deskTaken(ds) === true) { taken++; say(`${ds} — taken by someone else`, "muted"); await sleep(150); continue; }
-    let workdayId = workdayByDate[ds];
-    try {
-      if (!workdayId) {
-        if (!buildingId) { failed++; fail(`${ds} — no building`); continue; }
-        const r = await api("POST", "/me/workdays", { localStart, localEnd, buildingId, status: "OfficeDay" });
-        const data = tryParse(await r.text());
-        if (!r.ok) { failed++; fail(`${ds} — office-day failed (${r.status})`); continue; }
-        workdayId = data?.id; await sleep(300);
-      }
-      const r = await api("POST", "/me/workspace-reservations", { localStart, localEnd, nodeId: deskId, invitations: [], ...(workdayId ? { workdayId } : {}) });
-      if (r.ok) { booked++; say(`${ds} — booked ✓`, "ok"); }
-      else {
-        const j = tryParse(await r.text());
-        const reason = j && j.errors ? Object.entries(j.errors).map(([k, v]) => `${k}: ${[].concat(v).join(", ")}`).join("; ")
-          : (j && j.title) ? j.title : (typeof j === "string" ? j : JSON.stringify(j));
-        if (isTaken(r.status, reason)) { taken++; say(`${ds} — taken by someone else`, "muted"); }
-        else { failed++; fail(`${ds} — ${String(reason).slice(0, 140)}`); }
-      }
-    } catch (e) { failed++; fail(`${ds} — error`); }
-    await sleep(300);
-  }
-  say(`Done — booked ${booked}, taken ${taken}, skipped ${skipped}, failed ${failed}.`, "done");
+
+  // ---- the booking run, triggered by the in-panel button (no native popup) ----
+  const run = async () => {
+    let booked = 0, skipped = 0, taken = 0, failed = 0;
+    for (const d of days) {
+      const ds = fmt(d), localStart = ds + "T00:00:00", localEnd = ds + "T23:59:00";
+      const ex = reservedByDate[ds];
+      if (ex) { skipped++; say(`${ds} — already booked (${ex.deskName || "desk"})`, "muted"); continue; }
+      if (await deskTaken(ds) === true) { taken++; say(`${ds} — taken by someone else`, "muted"); await sleep(150); continue; }
+      let workdayId = workdayByDate[ds];
+      try {
+        if (!workdayId) {
+          if (!buildingId) { failed++; fail(`${ds} — no building`); continue; }
+          const r = await api("POST", "/me/workdays", { localStart, localEnd, buildingId, status: "OfficeDay" });
+          const data = tryParse(await r.text());
+          if (!r.ok) { failed++; fail(`${ds} — office-day failed (${r.status})`); continue; }
+          workdayId = data?.id; await sleep(300);
+        }
+        const r = await api("POST", "/me/workspace-reservations", { localStart, localEnd, nodeId: deskId, invitations: [], ...(workdayId ? { workdayId } : {}) });
+        if (r.ok) { booked++; say(`${ds} — booked ✓`, "ok"); }
+        else {
+          const j = tryParse(await r.text());
+          const reason = j && j.errors ? Object.entries(j.errors).map(([k, v]) => `${k}: ${[].concat(v).join(", ")}`).join("; ")
+            : (j && j.title) ? j.title : (typeof j === "string" ? j : JSON.stringify(j));
+          if (isTaken(r.status, reason)) { taken++; say(`${ds} — taken by someone else`, "muted"); }
+          else { failed++; fail(`${ds} — ${String(reason).slice(0, 140)}`); }
+        }
+      } catch (e) { failed++; fail(`${ds} — error`); }
+      await sleep(300);
+    }
+    say(`Done — booked ${booked}, taken ${taken}, skipped ${skipped}, failed ${failed}.`, "done");
+  };
+
+  // ---- in-panel Book button ----
+  if (!days.length) { say("No bookable days in your window.", "muted"); return; }
+  const btn = document.createElement("button");
+  btn.textContent = `Book ${days.length} day${days.length === 1 ? "" : "s"} (${fmt(today)} … ${fmt(end)})`;
+  btn.style.cssText = `display:block;width:100%;margin:12px 0 2px;padding:9px 12px;cursor:pointer;font-family:${SANS};font-size:13px;font-weight:600;color:${C.bg};background:${C.fg};border:1.5px solid ${C.fg};border-radius:4px`;
+  btn.onmouseenter = () => { btn.style.background = "transparent"; btn.style.color = C.fg; };
+  btn.onmouseleave = () => { btn.style.background = C.fg; btn.style.color = C.bg; };
+  btn.onclick = async () => {
+    btn.onmouseenter = btn.onmouseleave = null;
+    btn.disabled = true; btn.style.cursor = "default"; btn.style.opacity = ".5"; btn.textContent = "Booking…";
+    await run();
+    btn.remove();
+  };
+  body.appendChild(btn);
 })(); void 0;
