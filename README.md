@@ -3,23 +3,34 @@
 Book your Mapiq desk for **every available day in one shot**, instead of
 clicking through the calendar day by day.
 
-Reverse-engineered from a HAR capture of app.mapiq.com. Booking a desk is a
-single API call per day:
+Reverse-engineered from HAR captures of app.mapiq.com. The tool replays the
+app's real flow:
 
 ```
-POST https://app.mapiq.com/api/v2/me/workspace-reservations
-authorization: Bearer <your token>
-x-api-version: 2.0
-content-type: application/json
-
-{ "localStart": "2026-06-09T00:00:00",
-  "localEnd":   "2026-06-09T23:59:00",
-  "nodeId":     "<desk id>",
-  "invitations": [],
-  "workdayId":  "yLbAMW2qkbn2" }
+1. POST /api/v2/shifts/me/login               -> your limits + default building
+2. GET  /api/v2/me/workdays?startDate&endDate -> your office days; each has the
+                                                 `id` used as workdayId + dates
+3. GET  /api/v2/me/workspace-reservations?…   -> what you've already booked
+4. POST /api/v2/me/workdays                    -> register an office day for a
+   (only when a date has none yet)               date you haven't planned
+5. POST /api/v2/me/workspace-reservations      -> book the desk:
+   { "localStart":"2026-06-09T00:00:00", "localEnd":"2026-06-09T23:59:00",
+     "nodeId":"<desk id>", "invitations":[], "workdayId":"yLbAMW2qkbn2" }
 ```
 
-So the whole tool is just: loop over dates → fire this POST with your desk id.
+### How the dates / workdayId work (the part that confused us at first)
+
+- A **"workday" = a day you've marked as an office day.** `GET /me/workdays`
+  returns them, and each one's `id` is exactly the `workdayId` the desk booking
+  needs. So the workday list *is* your set of bookable days, with the precise
+  `localStart`/`localEnd` and id.
+- A desk reservation must be tied to a workday for that date, so booking a
+  brand-new day is two steps: create the office day, then book the desk. The
+  tool does both.
+- Your booking window comes from `POST /shifts/me/login`
+  (`effectiveAccessProfile`): typically `daysAhead: 14`, `registrationDays:
+  Mon–Fri`. The tool reads these and only targets days you're actually allowed
+  to book, skipping weekends and building-closed days.
 
 ## Which version to use
 
@@ -40,7 +51,8 @@ script** — it sidesteps every blocker.
 3. Edit the top of `autobook.console.js`:
    - `DESK_NODE_ID` — your desk id (the `nodeId` in the booking call, e.g.
      `27a000d2-…`).
-   - `WEEKS_AHEAD`, `SKIP_WEEKENDS`, `DRY_RUN` as you like.
+   - `DAYS_AHEAD` (`null` = use your account limit), `INCLUDE_WEEKENDS`,
+     `CREATE_MISSING_WORKDAYS`, `DRY_RUN` as you like.
 4. Paste the whole file into the console, press **Enter**.
 5. Read the printed table. Set `DRY_RUN = true` first if you want to preview.
 
@@ -71,17 +83,23 @@ manually with DevTools → Network open, click the
   script reads it automatically; the static page asks you to paste it.
 - **CSP `script-src 'self'`** on the app blocks bookmarklets — but **not** the
   DevTools console, which is why the console version is the reliable path.
-- **`workdayId`.** The captured payload included a per-day `workdayId`. It's
-  unclear whether the server actually requires it. Both tools try to
-  auto-discover the date→workdayId map from the calendar API; if that fails
-  they book with just date + desk id and show you the exact server response
-  per day. If it turns out to be required, you'll see the error immediately —
-  capture the calendar request and we can wire the real endpoint in (or fill
-  `WORKDAY_OVERRIDES` manually).
+- **`workdayId` (solved).** It's `workday.id` from `GET /me/workdays` — the
+  tools fetch it, no guessing.
+- **Creating office days.** The one endpoint not directly seen in a capture is
+  the *create* call. The tools POST to `/me/workdays` with
+  `{ localStart, localEnd, buildingId, status:"OfficeDay" }`, inferred from the
+  GET response shape. If your org disables booking-ahead or this 4xx's, you'll
+  see it in the per-day result; set `CREATE_MISSING_WORKDAYS = false` to only
+  book days you've already marked as office days. (Want it nailed down exactly?
+  Capture the network while you mark a new office day in the UI and we'll lock
+  the payload.)
 
 ## Notes
 
 - Bookings are sent sequentially with a small delay to be gentle on the API.
-- Days already booked / unavailable just show a failure row; the rest still go
-  through.
+- Already-booked days are skipped; unavailable days show a failure row; the
+  rest still go through.
+- Respects your account's booking window (`daysAhead`, `registrationDays`) and
+  skips building-closed days.
 - Only books your own desk for yourself (`invitations: []`).
+- **Run with `DRY_RUN` first** to preview exactly what it will create/book.
