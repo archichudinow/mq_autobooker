@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<!--
+  Mapiq desk auto-booker — static page version.
+
+  Works fully client-side. It mirrors the app's real flow:
+    POST /shifts/me/login -> GET /me/workdays -> GET /me/workspace-reservations
+    -> (POST /me/workdays if needed) -> POST /me/workspace-reservations
+  Because the API uses a Bearer token (not just your cookie) and this page is a
+  different origin than app.mapiq.com, it can't read the token for you — paste
+  it once (snippet provided). The API sends `access-control-allow-origin: *`,
+  so the cross-origin calls are allowed. If you ever hit a CORS/preflight
+  error, use autobook.console.js instead (same-origin, no such issue).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mapiq desk auto-booker</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.4rem; }
+  label { display: block; margin: .8rem 0 .2rem; font-weight: 600; }
+  input[type=text], textarea { width: 100%; box-sizing: border-box; padding: .5rem; font: inherit; }
+  textarea { height: 4.5rem; resize: vertical; }
+  .row { display: flex; gap: 1.2rem; flex-wrap: wrap; align-items: center; }
+  .row label { margin: 0; font-weight: 400; }
+  button { margin-top: 1.2rem; padding: .6rem 1.2rem; font: inherit; font-weight: 600; cursor: pointer; }
+  table { border-collapse: collapse; width: 100%; margin-top: 1.2rem; font-size: 14px; }
+  th, td { border: 1px solid #8884; padding: .3rem .5rem; text-align: left; }
+  .ok { color: #1a7f37; font-weight: 600; }
+  .bad { color: #cf222e; font-weight: 600; }
+  .muted { opacity: .7; }
+  details { margin: 1rem 0; background: #8881; padding: .6rem 1rem; border-radius: 6px; }
+  code { background: #8882; padding: .1rem .3rem; border-radius: 4px; }
+  small { opacity: .8; }
+</style>
+</head>
+<body>
+<h1>Mapiq desk auto-booker</h1>
+<p>Books one desk for every available office day in your booking window. All client-side — nothing is sent anywhere except Mapiq.</p>
+
+<details>
+  <summary><strong>How to get your token</strong> (paste into DevTools console on app.mapiq.com)</summary>
+  <p>Log in to app.mapiq.com, open DevTools (F12) → Console, paste this, press Enter — it copies your token to the clipboard:</p>
+  <pre><code>copy((()=>{for(let s of[localStorage,sessionStorage])for(let i=0;i&lt;s.length;i++){let v=s.getItem(s.key(i));try{let o=JSON.parse(v);if(o&amp;&amp;o.credentialType==="AccessToken"&amp;&amp;o.secret)return o.secret;}catch{}}return"NOT FOUND";})())</code></pre>
+  <p><small>The token expires in ~1 hour; re-copy if bookings start failing with 401.</small></p>
+</details>
+
+<label>Bearer token</label>
+<textarea id="token" placeholder="paste token (with or without 'Bearer ')"></textarea>
+
+<label>Desk node id</label>
+<input type="text" id="desk" placeholder="e.g. 27a000d2-a0fd-4da8-8c6c-69ad2e5453b4" />
+
+<div class="row" style="margin-top:1rem">
+  <span><label>Days ahead</label><input type="text" id="days" placeholder="auto" style="width:6rem"></span>
+  <label><input type="checkbox" id="weekends"> include weekends</label>
+  <label><input type="checkbox" id="create" checked> create missing office days</label>
+  <label><input type="checkbox" id="dry"> dry run</label>
+</div>
+
+<button id="go">Book all available days</button>
+
+<div id="out"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const API = "https://app.mapiq.com/api/v2";
+const pad = n => String(n).padStart(2, "0");
+const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const DOW = { Sunday:0, Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6 };
+const tryParse = t => { try { return JSON.parse(t); } catch { return t; } };
+
+for (const id of ["token","desk","days"]) {
+  $(id).value = localStorage.getItem("mq_"+id) || $(id).value;
+  $(id).addEventListener("input", () => localStorage.setItem("mq_"+id, $(id).value));
+}
+
+$("go").onclick = async () => {
+  const token = $("token").value.replace(/^Bearer\s+/i, "").trim();
+  const desk = $("desk").value.trim();
+  if (!token || !desk) { alert("Token and desk id are required."); return; }
+  const headers = {
+    "authorization": "Bearer " + token,
+    "content-type": "application/json",
+    "accept": "application/json, text/plain, */*",
+    "x-api-version": "2.0",
+  };
+  const api = (m, p, b) => fetch(API + p, { method: m, headers, body: b === undefined ? undefined : JSON.stringify(b) });
+  const weekends = $("weekends").checked, create = $("create").checked, dry = $("dry").checked;
+
+  const out = $("out");
+  out.innerHTML = "<p>Looking up your account & office days…</p>";
+
+  // limits + building
+  let buildingId = null, daysAhead = parseInt($("days").value) || 14, regDays = [1,2,3,4,5];
+  try {
+    const r = await api("POST", "/shifts/me/login", {});
+    if (r.ok) {
+      const me = await r.json();
+      buildingId = me.defaultBuildingId || buildingId;
+      const ap = me.effectiveAccessProfile || me.accessProfile;
+      if (ap) {
+        if (!$("days").value && ap.daysAhead) daysAhead = ap.daysAhead;
+        if (Array.isArray(ap.registrationDays) && ap.registrationDays.length)
+          regDays = ap.registrationDays.map(n => DOW[n]).filter(n => n !== undefined);
+      }
+    }
+  } catch {}
+
+  const start = new Date(); start.setHours(0,0,0,0);
+  const end = new Date(start); end.setDate(start.getDate() + daysAhead);
+  const q = `startDate=${fmt(start)}T00:00&endDate=${fmt(end)}T00:00`;
+
+  const workdayByDate = {}, reservedByDate = {}, closed = new Set();
+  try { const r = await api("GET", `/me/workdays?${q}`); if (r.ok) for (const w of await r.json()) { if (!buildingId && w.buildingId) buildingId = w.buildingId; workdayByDate[String(w.localStart).slice(0,10)] = w.id; } } catch {}
+  try { const r = await api("GET", `/me/workspace-reservations?${q}`); if (r.ok) for (const v of await r.json()) reservedByDate[String(v.localStart).slice(0,10)] = { deskId: v.workspace?.nodeId, deskName: v.workspace?.deskName }; } catch {}
+  try { const r = await api("GET", `/shifts/me/openingdayexceptions?from=${fmt(start)}&to=${fmt(end)}`); if (r.ok) for (const x of await r.json()) { const ds = String(x.date||x.localStart||x.day||"").slice(0,10); if (ds) closed.add(ds); } } catch {}
+
+  const days = [];
+  for (let i = 0; i <= daysAhead; i++) {
+    const d = new Date(start); d.setDate(start.getDate()+i);
+    if (!weekends && !regDays.includes(d.getDay())) continue;
+    if (closed.has(fmt(d))) continue;
+    days.push(d);
+  }
+
+  out.innerHTML = `<p class="muted">Building ${buildingId||"?"}, ${daysAhead} days ahead — ${days.length} candidate day(s).</p>
+    <table><thead><tr><th>Date</th><th>Status</th><th>Detail</th></tr></thead><tbody id="tb"></tbody></table>`;
+  const tb = $("tb");
+  const add = (ds, status, cls, detail) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${ds}</td><td class="${cls}">${status}</td><td>${detail||""}</td>`;
+    tb.appendChild(tr);
+  };
+
+  let booked = 0;
+  for (const d of days) {
+    const ds = fmt(d), localStart = ds+"T00:00:00", localEnd = ds+"T23:59:00";
+
+    const existing = reservedByDate[ds];
+    if (existing) { add(ds, existing.deskId===desk ? "already booked" : `booked (${existing.deskName})`, "muted", "skipped"); continue; }
+
+    let workdayId = workdayByDate[ds];
+    if (!workdayId) {
+      if (!create) { add(ds, "no office day", "muted", "enable 'create missing office days'"); continue; }
+      if (dry) { add(ds, "would create + book", "ok", ""); booked++; continue; }
+      if (!buildingId) { add(ds, "skip", "bad", "no building resolved"); continue; }
+      try {
+        const r = await api("POST", "/me/workdays", { localStart, localEnd, buildingId, status: "OfficeDay" });
+        const data = tryParse(await r.text());
+        if (!r.ok) { add(ds, `office-day FAIL ${r.status}`, "bad", typeof data==="string"?data:JSON.stringify(data)); continue; }
+        workdayId = data?.id; await sleep(350);
+      } catch (e) { add(ds, "office-day ERROR", "bad", String(e)); continue; }
+    } else if (dry) { add(ds, "would book", "ok", "office day exists"); booked++; continue; }
+
+    try {
+      const body = { localStart, localEnd, nodeId: desk, invitations: [] };
+      if (workdayId) body.workdayId = workdayId;
+      const r = await api("POST", "/me/workspace-reservations", body);
+      const data = tryParse(await r.text());
+      if (r.ok) { add(ds, "booked ✅", "ok", data?.workspace?.deskName||""); booked++; }
+      else { add(ds, `fail ${r.status}`, "bad", (typeof data==="string"?data:JSON.stringify(data)) + " (try the console script if CORS)"); }
+    } catch (e) { add(ds, "error", "bad", String(e) + " — likely CORS; use the console script"); }
+    await sleep(350);
+  }
+  tb.insertAdjacentHTML("afterend", `<p><strong>${booked}</strong> ${dry?"would book":"booked"}.</p>`);
+};
+</script>
+</body>
+</html>
