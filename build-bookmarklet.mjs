@@ -50,13 +50,16 @@ put any name, and paste the button's link as the URL.</p>
 
 <h2>Good to know</h2>
 <ul>
- <li><b>No setup of your desk needed</b> — it remembers the desk from your most recent
-     booking. (Haven't booked before? Book one day manually first, then use the bookmark.)</li>
+ <li><b>It follows your “same desk” pattern.</b> No desk setup needed — it books the
+     <b>same desk as your most recent booking</b>. So book your preferred desk once (any
+     day) and the bookmark repeats it across every available day.</li>
+ <li><b>First time / no bookings yet?</b> Book one day manually first, then click the
+     bookmark — it’ll copy that desk to the rest.</li>
+ <li><b>To switch desks:</b> just book the new desk manually once, then click the bookmark —
+     it always follows your latest booking.</li>
  <li><b>Safe to click again</b> — already-booked days are skipped, so re-run it weekly as
      new days open up (you can book ~2 weeks ahead).</li>
  <li>It only books <b>your own</b> desk for <b>you</b>; nothing is sent anywhere except Mapiq.</li>
- <li>To switch desks, book the new one manually once, then run
-     <code>localStorage.removeItem('mqab_desk')</code> in the console — or just keep using your usual desk.</li>
 </ul>
 </body></html>
 `;
