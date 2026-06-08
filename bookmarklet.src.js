@@ -124,7 +124,10 @@
   say(`Booking <b>${deskName || deskId}</b> for ${days.length} day(s)…`);
 
   // ---- ensure office day + book desk, per day ----
-  let booked = 0, skipped = 0, failed = 0;
+  // A desk taken by someone else isn't an error — show it gently, not red.
+  const isTaken = (status, text) => status === 409 ||
+    /taken|occup|unavail|not available|already (booked|reserved|taken)|fully booked|no (capacity|availability|space)|capacity|full|in use|reserved by/i.test(text || "");
+  let booked = 0, skipped = 0, taken = 0, failed = 0;
   for (const d of days) {
     const ds = fmt(d), localStart = ds + "T00:00:00", localEnd = ds + "T23:59:00";
     const ex = reservedByDate[ds];
@@ -140,9 +143,13 @@
       }
       const r = await api("POST", "/me/workspace-reservations", { localStart, localEnd, nodeId: deskId, invitations: [], ...(workdayId ? { workdayId } : {}) });
       if (r.ok) { booked++; say(`${ds} — booked ✓`, "ok"); }
-      else { failed++; const t = await r.text(); fail(`${ds} — failed (${r.status}) ${String(t).slice(0, 80)}`); }
+      else {
+        const t = await r.text();
+        if (isTaken(r.status, t)) { taken++; say(`${ds} — taken by someone else`, "muted"); }
+        else { failed++; fail(`${ds} — failed (${r.status}) ${String(t).slice(0, 80)}`); }
+      }
     } catch (e) { failed++; fail(`${ds} — error`); }
     await sleep(300);
   }
-  say(`Done — booked ${booked}, skipped ${skipped}, failed ${failed}.`, "done");
+  say(`Done — booked ${booked}, taken ${taken}, skipped ${skipped}, failed ${failed}.`, "done");
 })(); void 0;
