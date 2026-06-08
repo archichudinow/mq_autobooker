@@ -43,7 +43,7 @@
 <details>
   <summary><strong>How to get your token</strong> (paste into DevTools console on app.mapiq.com)</summary>
   <p>Log in to app.mapiq.com, open DevTools (F12) → Console, paste this, press Enter — it copies your token to the clipboard:</p>
-  <pre><code>copy((()=>{for(let i=0;i&lt;localStorage.length;i++){let v=localStorage.getItem(localStorage.key(i));try{let o=JSON.parse(v);if(o&amp;&amp;o.credentialType==="AccessToken"&amp;&amp;o.secret)return o.secret;}catch{}}return"NOT FOUND";})())</code></pre>
+  <pre><code>copy((()=>{for(let s of[localStorage,sessionStorage])for(let i=0;i&lt;s.length;i++){let v=s.getItem(s.key(i));try{let o=JSON.parse(v);if(o&amp;&amp;o.credentialType==="AccessToken"&amp;&amp;o.secret)return o.secret;}catch{}}return"NOT FOUND";})())</code></pre>
   <p><small>The token expires in ~1 hour; re-copy if bookings start failing with 401.</small></p>
 </details>
 

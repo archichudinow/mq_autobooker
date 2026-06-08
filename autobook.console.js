@@ -41,20 +41,22 @@
   const tryParse = t => { try { return JSON.parse(t); } catch { return t; } };
   const DOW = { Sunday:0, Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6 };
 
-  // ---- 1. Bearer token from MSAL localStorage ----
+  // ---- 1. Bearer token from MSAL cache (scans local + session storage) ----
   function findToken() {
     let best = null, bestExp = 0;
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i), v = localStorage.getItem(k);
-      if (!v) continue;
-      let secret = null;
-      try { const o = JSON.parse(v); if (o && o.credentialType === "AccessToken" && o.secret) secret = o.secret; } catch {}
-      if (!secret && /accesstoken/i.test(k || "") && v.split(".").length === 3) secret = v;
-      if (!secret) continue;
-      try {
-        const c = JSON.parse(atob(secret.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-        if (c.exp && c.exp > bestExp) { best = secret; bestExp = c.exp; }
-      } catch { if (!best) best = secret; }
+    for (const store of [localStorage, sessionStorage]) {
+      for (let i = 0; i < store.length; i++) {
+        const k = store.key(i), v = store.getItem(k);
+        if (!v) continue;
+        let secret = null;
+        try { const o = JSON.parse(v); if (o && o.credentialType === "AccessToken" && o.secret) secret = o.secret; } catch {}
+        if (!secret && /accesstoken/i.test(k || "") && v.split(".").length === 3) secret = v;
+        if (!secret) continue;
+        try {
+          const c = JSON.parse(atob(secret.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+          if (c.exp && c.exp > bestExp) { best = secret; bestExp = c.exp; }
+        } catch { if (!best) best = secret; }
+      }
     }
     return best;
   }
