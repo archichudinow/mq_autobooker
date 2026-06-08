@@ -8,7 +8,7 @@
  *   - shows a live overlay on the page (no DevTools needed)
  *
  * This readable file is the SOURCE. The actual bookmarklet is generated from
- * it by build-bookmarklet.mjs and embedded into bookmarklet.html.
+ * it by build-bookmarklet.mjs and embedded into index.html (the install page).
  * ========================================================================= */
 
 (async () => {

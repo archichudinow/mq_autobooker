@@ -1,4 +1,4 @@
-// Generates bookmarklet.html (the shareable install page) from bookmarklet.src.js.
+// Generates index.html (the shareable install page) from bookmarklet.src.js.
 // Usage: node build-bookmarklet.mjs
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -102,5 +102,5 @@ logged-in tab and uses it <b>only</b> to call Mapiq's own API at <code>app.mapiq
 </body></html>
 `;
 
-writeFileSync(new URL("./bookmarklet.html", import.meta.url), html);
-console.log(`bookmarklet.html written — bookmarklet is ${href.length} chars.`);
+writeFileSync(new URL("./index.html", import.meta.url), html);
+console.log(`index.html written — bookmarklet is ${href.length} chars.`);
