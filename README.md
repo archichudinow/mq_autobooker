@@ -85,14 +85,12 @@ manually with DevTools → Network open, click the
   DevTools console, which is why the console version is the reliable path.
 - **`workdayId` (solved).** It's `workday.id` from `GET /me/workdays` — the
   tools fetch it, no guessing.
-- **Creating office days.** The one endpoint not directly seen in a capture is
-  the *create* call. The tools POST to `/me/workdays` with
-  `{ localStart, localEnd, buildingId, status:"OfficeDay" }`, inferred from the
-  GET response shape. If your org disables booking-ahead or this 4xx's, you'll
-  see it in the per-day result; set `CREATE_MISSING_WORKDAYS = false` to only
-  book days you've already marked as office days. (Want it nailed down exactly?
-  Capture the network while you mark a new office day in the UI and we'll lock
-  the payload.)
+- **Creating office days (verified).** Days you haven't planned yet are
+  registered with `POST /me/workdays`
+  (`{ localStart, localEnd, buildingId, status:"OfficeDay" }`), then booked.
+  Confirmed working end-to-end against a live account (200 + reservation
+  succeeds with the returned id). Set `CREATE_MISSING_WORKDAYS = false` if you
+  only want to book days you've already marked as office days.
 
 ## Notes
 

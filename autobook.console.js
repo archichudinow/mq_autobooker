@@ -191,6 +191,7 @@
   }
 
   console.table(results);
-  const booked = results.filter(r => /BOOKED|would/.test(r.status)).length;
-  console.log(`[mapiq] Done — ${booked}/${results.length} ${DRY_RUN ? "planned" : "booked"}. Full detail:`, results);
+  const n = re => results.filter(r => re.test(r.status)).length;
+  console.log(`[mapiq] Done — booked ${n(/BOOKED/)}, planned ${n(/would/)}, ` +
+              `skipped(already) ${n(/already/)}, failed ${n(/FAIL|ERROR/)}, of ${results.length} day(s).`);
 })();
