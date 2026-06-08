@@ -72,8 +72,8 @@
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const end = new Date(today); end.setDate(today.getDate() + daysAhead);
-  const look = new Date(today); look.setDate(today.getDate() - 30); // look back to detect your desk
-  const q = `startDate=${fmt(look)}T00:00&endDate=${fmt(end)}T00:00`;
+  // Query only the forward window — the workdays endpoint 400s on wide/past ranges.
+  const q = `startDate=${fmt(today)}T00:00&endDate=${fmt(end)}T00:00`;
 
   // ---- existing workdays + reservations ----
   const workdayByDate = {}, reservedByDate = {}, closed = new Set();
