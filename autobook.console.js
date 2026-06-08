@@ -189,11 +189,15 @@
       const body = { localStart, localEnd, nodeId: DESK_NODE_ID, invitations: [] };
       if (workdayId) body.workdayId = workdayId;
       const r = await api("POST", "/me/workspace-reservations", body);
-      const data = tryParse(await r.text());
+      const raw = await r.text();
+      const data = tryParse(raw);
+      // A desk taken by someone else isn't an error — label it, don't flag red.
+      const taken = !r.ok && (r.status === 409 ||
+        /taken|occup|unavail|not available|already (booked|reserved|taken)|fully booked|no (capacity|availability|space)|capacity|full|in use|reserved by/i.test(raw));
       record({
         date: ds,
-        status: r.ok ? "BOOKED ✅" : `FAIL ${r.status}`,
-        detail: r.ok ? (data?.workspace?.deskName ?? "") : (typeof data === "string" ? data : JSON.stringify(data)),
+        status: r.ok ? "BOOKED ✅" : taken ? "taken by someone else" : `FAIL ${r.status}`,
+        detail: r.ok ? (data?.workspace?.deskName ?? "") : taken ? "" : (typeof data === "string" ? data : JSON.stringify(data)),
       });
     } catch (e) { record({ date: ds, status: "ERROR", detail: String(e) }); }
     await sleep(DELAY_MS);
@@ -201,6 +205,6 @@
 
   console.table(results);
   const n = re => results.filter(r => re.test(r.status)).length;
-  console.log(`[mapiq] Done — booked ${n(/BOOKED/)}, planned ${n(/would/)}, ` +
+  console.log(`[mapiq] Done — booked ${n(/BOOKED/)}, planned ${n(/would/)}, taken ${n(/taken/)}, ` +
               `skipped(already) ${n(/already/)}, failed ${n(/FAIL|ERROR/)}, of ${results.length} day(s).`);
 })();

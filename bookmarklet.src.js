@@ -104,11 +104,13 @@
   // Uses recent reservations (incl. just-cancelled), so it tracks the desk you
   // last chose and survives deleting all upcoming bookings.
   // Privacy: we deliberately store NOTHING (no token, no desk) on the device.
-  let deskId = "", deskName = "";
+  let deskId = "", deskName = "", deskLoc = "";
   const deskRes = rawRes.filter(v => v.workspace?.nodeType === "Desk" && v.workspace?.nodeId);
   if (deskRes.length) {
     deskRes.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))); // newest first
-    deskId = deskRes[0].workspace.nodeId; deskName = deskRes[0].workspace.deskName;
+    const w = deskRes[0].workspace;
+    deskId = w.nodeId; deskName = w.deskName || w.nodeName || "your desk";
+    deskLoc = [w.areaName, w.floorName, w.buildingName].filter(Boolean).join(" · ");
   }
   if (!deskId) {
     deskId = (prompt("Couldn't detect your desk. Book one day manually in Mapiq first, then click again — or paste your desk id here:") || "").trim();
@@ -120,11 +122,16 @@
   const days = [];
   for (let i = 0; i <= daysAhead; i++) { const d = new Date(today); d.setDate(today.getDate() + i); if (!regDays.includes(d.getDay())) continue; if (closed.has(fmt(d))) continue; days.push(d); }
 
-  if (!confirm(`Book ${deskName || "your desk"} for all available days (${fmt(today)} … ${fmt(end)})?\n\nAlready-booked days are skipped.`)) { say("Cancelled.", "muted"); return; }
-  say(`Booking <b>${deskName || deskId}</b> for ${days.length} day(s)…`);
+  if (!confirm(`Book ${deskName} for all available days (${fmt(today)} … ${fmt(end)})?\n\nAlready-booked days are skipped.`)) { say("Cancelled.", "muted"); return; }
+  say(`Desk: <b>${deskName}</b>`, "info");
+  if (deskLoc) say(deskLoc, "muted");
+  say(`Booking for ${days.length} day(s)…`, "muted");
 
   // ---- ensure office day + book desk, per day ----
-  let booked = 0, skipped = 0, failed = 0;
+  // A desk taken by someone else isn't an error — show it gently, not red.
+  const isTaken = (status, text) => status === 409 ||
+    /taken|occup|unavail|not available|already (booked|reserved|taken)|fully booked|no (capacity|availability|space)|capacity|full|in use|reserved by/i.test(text || "");
+  let booked = 0, skipped = 0, taken = 0, failed = 0;
   for (const d of days) {
     const ds = fmt(d), localStart = ds + "T00:00:00", localEnd = ds + "T23:59:00";
     const ex = reservedByDate[ds];
@@ -140,9 +147,15 @@
       }
       const r = await api("POST", "/me/workspace-reservations", { localStart, localEnd, nodeId: deskId, invitations: [], ...(workdayId ? { workdayId } : {}) });
       if (r.ok) { booked++; say(`${ds} — booked ✓`, "ok"); }
-      else { failed++; const t = await r.text(); fail(`${ds} — failed (${r.status}) ${String(t).slice(0, 80)}`); }
+      else {
+        const j = tryParse(await r.text());
+        const reason = j && j.errors ? Object.entries(j.errors).map(([k, v]) => `${k}: ${[].concat(v).join(", ")}`).join("; ")
+          : (j && j.title) ? j.title : (typeof j === "string" ? j : JSON.stringify(j));
+        if (isTaken(r.status, reason)) { taken++; say(`${ds} — taken by someone else`, "muted"); }
+        else { failed++; fail(`${ds} — ${String(reason).slice(0, 140)}`); }
+      }
     } catch (e) { failed++; fail(`${ds} — error`); }
     await sleep(300);
   }
-  say(`Done — booked ${booked}, skipped ${skipped}, failed ${failed}.`, "done");
+  say(`Done — booked ${booked}, taken ${taken}, skipped ${skipped}, failed ${failed}.`, "done");
 })(); void 0;
