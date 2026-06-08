@@ -17,28 +17,55 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Mapiq desk auto-booker</title>
 <style>
-  :root { color-scheme: light dark; }
-  body { font: 15px/1.5 system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
-  h1 { font-size: 1.4rem; }
-  label { display: block; margin: .8rem 0 .2rem; font-weight: 600; }
-  input[type=text], textarea { width: 100%; box-sizing: border-box; padding: .5rem; font: inherit; }
-  textarea { height: 4.5rem; resize: vertical; }
-  .row { display: flex; gap: 1.2rem; flex-wrap: wrap; align-items: center; }
-  .row label { margin: 0; font-weight: 400; }
-  button { margin-top: 1.2rem; padding: .6rem 1.2rem; font: inherit; font-weight: 600; cursor: pointer; }
-  table { border-collapse: collapse; width: 100%; margin-top: 1.2rem; font-size: 14px; }
-  th, td { border: 1px solid #8884; padding: .3rem .5rem; text-align: left; }
-  .ok { color: #1a7f37; font-weight: 600; }
-  .bad { color: #cf222e; font-weight: 600; }
-  .muted { opacity: .7; }
-  details { margin: 1rem 0; background: #8881; padding: .6rem 1rem; border-radius: 6px; }
-  code { background: #8882; padding: .1rem .3rem; border-radius: 4px; }
-  small { opacity: .8; }
+  :root{
+    --bg:#ffffff; --fg:#16150f; --muted:#5c5b54; --line:#e4e2da; --box:#f7f6f2; --accent:#16150f;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,"Times New Roman",serif;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#100f0d; --fg:#ecebe4; --muted:#9c9a90; --line:#2b2a26; --box:#1a1916; --accent:#ecebe4;}
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:16px;line-height:1.65;
+       max-width:680px;margin:0 auto;padding:3rem 1.3rem 5rem;-webkit-font-smoothing:antialiased}
+  h1{font-family:var(--serif);font-weight:500;font-size:2.2rem;letter-spacing:-.01em;margin:0 0 .3rem}
+  .lead{font-family:var(--serif);font-style:italic;color:var(--muted);margin:0 0 1.6rem}
+  label{display:block;margin:1rem 0 .25rem;font-weight:600;font-size:.95rem}
+  input[type=text],textarea{width:100%;padding:.55rem .65rem;font:inherit;background:var(--bg);
+       color:var(--fg);border:1px solid var(--line);border-radius:5px}
+  input:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  textarea{height:4.5rem;resize:vertical;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85rem}
+  .row{display:flex;gap:1.3rem;flex-wrap:wrap;align-items:center}
+  .row label{margin:0;font-weight:400}
+  button{margin-top:1.4rem;padding:.65rem 1.4rem;font:inherit;font-weight:600;cursor:pointer;
+       border:1.5px solid var(--accent);background:var(--accent);color:var(--bg);border-radius:3px;
+       transition:background .15s,color .15s}
+  button:hover{background:transparent;color:var(--accent)}
+  table{border-collapse:collapse;width:100%;margin-top:1.3rem;font-size:14px}
+  th,td{border:1px solid var(--line);padding:.35rem .55rem;text-align:left}
+  th{font-weight:600}
+  .ok{font-weight:600} .bad{font-weight:600;text-decoration:underline} .muted{color:var(--muted)}
+  details{margin:1rem 0;background:var(--box);border:1px solid var(--line);padding:.7rem 1rem;border-radius:6px}
+  summary{cursor:pointer}
+  .box{background:var(--box);border:1px solid var(--line);border-left:3px solid var(--accent);
+       border-radius:6px;padding:.9rem 1.1rem;margin:1.3rem 0}
+  .box h3{font-family:var(--serif);font-weight:500;font-size:1.02rem;margin:.1rem 0 .4rem}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82em;background:var(--bg);
+       border:1px solid var(--line);padding:.06rem .3rem;border-radius:4px}
+  small{color:var(--muted)}
 </style>
 </head>
 <body>
 <h1>Mapiq desk auto-booker</h1>
-<p>Books one desk for every available office day in your booking window. All client-side — nothing is sent anywhere except Mapiq.</p>
+<p class="lead">Books one desk for every available office day in your booking window — entirely in
+your browser.</p>
+
+<div class="box">
+  <h3>Educational / hobby demo — use at your own risk</h3>
+  <small>Provided as-is, no warranty. Not affiliated with or endorsed by Mapiq; use it in line with
+  your organisation's policies and Mapiq's terms. <b>Your token is never saved</b> — it stays in this
+  page only while open and is sent only to <code>app.mapiq.com</code>.</small>
+</div>
 
 <details>
   <summary><strong>How to get your token</strong> (paste into DevTools console on app.mapiq.com)</summary>
@@ -73,7 +100,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const DOW = { Sunday:0, Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6 };
 const tryParse = t => { try { return JSON.parse(t); } catch { return t; } };
 
-for (const id of ["token","desk","days"]) {
+// Never persist the token. Only remember non-sensitive convenience fields.
+for (const id of ["desk","days"]) {
   $(id).value = localStorage.getItem("mq_"+id) || $(id).value;
   $(id).addEventListener("input", () => localStorage.setItem("mq_"+id, $(id).value));
 }

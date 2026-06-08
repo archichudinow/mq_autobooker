@@ -88,22 +88,19 @@
 
   // ---- which desk to book: follow your MOST RECENT desk booking ----
   // Uses recent reservations (incl. just-cancelled), so it tracks the desk you
-  // last chose and survives deleting all upcoming bookings. localStorage is a
-  // fallback only when there's no history at all.
+  // last chose and survives deleting all upcoming bookings.
+  // Privacy: we deliberately store NOTHING (no token, no desk) on the device.
   let deskId = "", deskName = "";
   const deskRes = rawRes.filter(v => v.workspace?.nodeType === "Desk" && v.workspace?.nodeId);
   if (deskRes.length) {
     deskRes.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))); // newest first
     deskId = deskRes[0].workspace.nodeId; deskName = deskRes[0].workspace.deskName;
   }
-  if (!deskId) { deskId = localStorage.getItem("mqab_desk") || ""; deskName = localStorage.getItem("mqab_deskName") || ""; }
   if (!deskId) {
     deskId = (prompt("Couldn't detect your desk. Book one day manually in Mapiq first, then click again — or paste your desk id here:") || "").trim();
     if (!deskId) { fail("No desk selected — nothing to do."); return; }
     deskName = "your desk";
   }
-  localStorage.setItem("mqab_desk", deskId);
-  if (deskName) localStorage.setItem("mqab_deskName", deskName);
 
   // ---- target days ----
   const days = [];
